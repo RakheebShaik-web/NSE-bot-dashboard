@@ -70,6 +70,7 @@ export default function Home(){
   const [feed,setFeed]=useState<Feed|null>(null);
   const [loading,setLoading]=useState(true);
   const [filter,setFilter]=useState("");
+  const [preview,setPreview]=useState(false);
   const [tradeView,setTradeView]=useState<"ALL"|"OPEN"|"CLOSED">("ALL");
   const [tradeSort,setTradeSort]=useState<"NEWEST"|"BEST"|"SYMBOL">("NEWEST");
   const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};
@@ -99,7 +100,7 @@ export default function Home(){
     <a className="skip" href="#dashboard">Skip to dashboard</a>
     <header className="terminal-head">
       <div className="head-main">
-        <div><span className="eyebrow">INDIAN EQUITIES · SYSTEMATIC DESK</span><h1>NSE-bot <em>/ performance terminal</em></h1><p>A read-only institutional view over the systematic research pipeline — signals, execution record, drawdown and factor risk from the latest published snapshot.</p></div>
+        <div className="terminal-identity"><span className="terminal-mark">⌁</span><div><h1>NSE-bot <em>/ Research Terminal</em></h1><p>INDIAN EQUITIES · SYSTEMATIC LONG BOOK · SCHEMA V1</p></div></div>
         <div className="feed-meta">
           <a className="blotter-link" href="#trade-blotter">View trade blotter ↓</a>
           <button onClick={load} disabled={loading}>↻ {loading?"Syncing":"Refresh"}</button>
@@ -110,7 +111,8 @@ export default function Home(){
     </header>
 
     <div id="dashboard" className="board">
-      {!live&&<div className="notice"><b>△ Illustrative data in use.</b> The upstream feed currently has no published rows. Every visible sample number demonstrates the interface only and is not an NSE-bot track record.</div>}
+      {!live&&!preview?<div className="empty-gate"><div className="database-mark">▤</div><h3>Feed connected · awaiting first publish</h3><p>The live feed is reachable and valid, but the bot has not written any equity, trade or signal records yet.</p><button onClick={()=>setPreview(true)}>PREVIEW WITH ILLUSTRATIVE SAMPLE</button></div>:<>
+      {!live&&<div className="notice"><b>Illustrative preview.</b> Synthetic sample output is shown only to demonstrate the terminal layout and is not an NSE-bot track record. <button onClick={()=>setPreview(false)}>Exit preview</button></div>}
 
       <div className="primary-grid">
         <div>
@@ -166,6 +168,7 @@ export default function Home(){
           <div className="table-wrap"><table><caption>Full list of trades with entry, exit and P&amp;L</caption><thead><tr>{["SYMBOL","SIDE","ENTRY","EXIT","QTY","IN","OUT","P&L","RETURN"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{visibleTrades.map((t,i)=><tr key={`${t.symbol}-${i}`}><td><b>{t.symbol}</b>{!t.exitDate&&<small className="open-badge">Open</small>}</td><td>{t.side}</td><td>{t.entryDate}</td><td>{t.exitDate??"—"}</td><td>{t.qty||"—"}</td><td>{t.entry.toLocaleString("en-IN")}</td><td>{t.exit?.toLocaleString("en-IN")??"—"}</td><td className={(t.pnl??0)>=0?"pos":"neg"}>{t.pnl===null?"—":money(t.pnl)}</td><td className={(t.ret??0)>=0?"pos":"neg"}>{t.ret===null?"—":pct(t.ret)}</td></tr>)}</tbody></table></div>
         </Panel>
       </div>
+      </>}
     </div>
     <footer>Research interface only. Illustrative figures are synthetic placeholders and must not be read as realised or backtested performance.</footer>
   </main>
