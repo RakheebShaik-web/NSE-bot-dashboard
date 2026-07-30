@@ -52,6 +52,17 @@ const inr=(n:number,d=0)=>`${n<0?"-":""}₹${Math.abs(n).toLocaleString("en-IN",
 const pct=(n:number,d=1)=>`${n>0?"+":""}${(n*100).toFixed(d)}%`;
 const line=(v:number[],w=1000,h=360)=>{const lo=Math.min(...v),hi=Math.max(...v);return v.map((x,i)=>`${i/(v.length-1)*w},${h-(x-lo)/Math.max(1,hi-lo)*h}`).join(" ")};
 function SectionHead({eyebrow,title,copy,tag}:{eyebrow:string;title:string;copy:string;tag?:string}){return <header className="section-head"><div><span>{eyebrow}</span><h2>{title}</h2><p>{copy}</p></div>{tag&&<b>{tag}</b>}</header>}
+function equityForRange(points:EquityPoint[],range:string){
+ if(range==="ALL"||points.length<2)return points;
+ const years=Number.parseInt(range,10);
+ if(!Number.isFinite(years))return points;
+ const lastDate=new Date(points.at(-1)!.date);
+ if(Number.isNaN(lastDate.getTime()))return points;
+ const cutoff=new Date(lastDate);
+ cutoff.setFullYear(cutoff.getFullYear()-years);
+ const start=points.findIndex(point=>new Date(point.date)>=cutoff);
+ return start<0?points:points.slice(Math.max(0,start-1));
+}
 function EquityChart({points,demo}:{points:EquityPoint[];demo:boolean}){
  const[hover,setHover]=useState<number|null>(null);
  const values=points.map(p=>p.value),lo=Math.min(...values),hi=Math.max(...values),span=Math.max(1,hi-lo);
@@ -83,17 +94,17 @@ export default function Home(){
  const signals:Signal[]=live?feed!.signals.map(s=>({symbol:s.ticker,action:"BUY",sector:s.sector,date:s.date,price:s.close,stop:s.initial_stop,target:s.close*1.14,conviction:s.score,note:"Systematic entry cleared the strategy filters."})):demo?sampleSignals:[];
  const trades:Trade[]=live?feed!.trades.map(t=>({symbol:t.ticker,side:"LONG",entryDate:t.entry_date,exitDate:"Closed",entry:t.entry,exit:t.exit,qty:0,ret:t.net_return,pnl:(t.exit-t.entry),days:0,reason:t.exit_reason})):demo?allSampleTrades:[];
  const rows=trades.filter(t=>t.symbol.toLowerCase().includes(filter.toLowerCase())&&(outcome==="all"||outcome==="wins"&&t.ret>0||outcome==="losses"&&t.ret<0)).sort((a,b)=>sort==="Return"?b.ret-a.ret:sort==="P&L"?b.pnl-a.pnl:sort==="Symbol"?a.symbol.localeCompare(b.symbol):0);
- const rangeSize=demo?({ALL:equity.length,"5Y":260,"3Y":156,"1Y":52}[range]??equity.length):({ALL:equity.length,"5Y":1260,"3Y":756,"1Y":252}[range]??equity.length);
- const visibleEquity=equity.slice(-rangeSize),eqValues=visibleEquity.map(x=>x.value),dds=equity.map(x=>x.dd),final=eqValues.at(-1)??0,total=demo&&range==="ALL"?0.4418:final&&eqValues[0]?final/eqValues[0]-1:0;
+ const visibleEquity=equityForRange(equity,range),eqValues=visibleEquity.map(x=>x.value),allValues=equity.map(x=>x.value),dds=equity.map(x=>x.dd),final=eqValues.at(-1)??0;
+ const rangeTotal=final&&eqValues[0]?final/eqValues[0]-1:0,inceptionTotal=allValues.length>1?allValues.at(-1)!/allValues[0]-1:0;
  return <main>
   <a className="skip" href="#main">Skip to content</a>
   <header className="command"><div className="pulse-logo">⌁</div><div className="brand-copy"><h1>NSE-bot <em>/ Research Terminal</em></h1><p>INDIAN EQUITIES · SYSTEMATIC LONG BOOK · SCHEMA V1</p></div><div className={`mode ${demo?"sample":live?"live":""}`}><i/>{demo?"SAMPLE MODE":live?"LIVE":"AWAITING DATA"}</div><div className="stamp">NO TIMESTAMP · 0S AGO</div><button onClick={load}>↻</button></header>
   <div id="main" className="terminal">
    {!live&&!demo&&<section className="await"><div>▤</div><h3>Feed connected · awaiting first publish</h3><p>The live feed is reachable and valid, but the bot has not written any equity, trade or signal records yet.</p><button onClick={()=>setSample(true)}>PREVIEW WITH ILLUSTRATIVE SAMPLE</button></section>}
    {demo&&<div className="sample-alert"><b>△ ILLUSTRATIVE SAMPLE</b> — synthetic figures generated in-browser to demonstrate layout. Not verified, not backtested, not the NSE-bot track record.</div>}
-   <section className="kpis">{[["TOTAL RETURN",demo?"+44.2%":live?pct(total):"—",demo?"NAV ₹14.5L":"since inception","positive"],["MAX DRAWDOWN",demo?"-17.3%":live?pct(Math.min(...dds)):"—","peak-to-trough","negative"],["SHARPE",demo?"1.32":live?String(feed?.summary.cohort_sharpe??"—"):"—",demo?"Sortino 1.86":"Sortino —",""],["WIN RATE",demo?"60.3%":live?pct(feed?.summary.win_rate??0):"—",demo?"41 of 68 closed":"0 of — closed","positive"],["CLOSED TRADES",demo?"68":live?String(trades.length):"0",demo?"PF 1.74":"PF —",""]].map(x=><div key={x[0]}><span>{x[0]}</span><strong className={x[3]}>{x[1]}</strong><small>{x[2]}</small></div>)}</section>
+   <section className="kpis">{[["TOTAL RETURN",demo?"+44.2%":live?pct(inceptionTotal):"—",demo?"NAV ₹14.5L":"since inception","positive"],["MAX DRAWDOWN",demo?"-17.3%":live?pct(Math.min(...dds)):"—","peak-to-trough","negative"],["SHARPE",demo?"1.32":live?String(feed?.summary.cohort_sharpe??"—"):"—",demo?"Sortino 1.86":"Sortino —",""],["WIN RATE",demo?"60.3%":live?pct(feed?.summary.win_rate??0):"—",demo?"41 of 68 closed":"0 of — closed","positive"],["CLOSED TRADES",demo?"68":live?String(trades.length):"0",demo?"PF 1.74":"PF —",""]].map(x=><div key={x[0]}><span>{x[0]}</span><strong className={x[3]}>{x[1]}</strong><small>{x[2]}</small></div>)}</section>
    <div className="hero-grid">
-    <section className="module equity-module"><SectionHead eyebrow="PORTFOLIO" title="Equity curve" copy={demo?"Illustrative sample series — not verified performance.":"Mark-to-market net asset value published by the strategy runner."}/><div className="ranges">{["1Y","3Y","5Y","ALL"].map(r=><button className={range===r?"active":""} onClick={()=>setRange(r)} key={r}>{r}</button>)}</div>{visibleEquity.length?<><div className="equity-stats"><div><span>LATEST NAV</span><b>{demo?inr(1449894):inr(final)}</b></div><div><span>{range} CHANGE</span><b>{pct(total,2)}</b></div></div><EquityChart points={visibleEquity} demo={demo}/></>:<div className="empty"><h3>No equity history</h3><p>The NAV series is empty. The curve renders after the first published mark.</p></div>}</section>
+    <section className="module equity-module"><SectionHead eyebrow="PORTFOLIO" title="Equity curve" copy={demo?"Illustrative sample series — not verified performance.":"Mark-to-market net asset value published by the strategy runner."}/><div className="ranges">{["1Y","3Y","5Y","ALL"].map(r=><button className={range===r?"active":""} onClick={()=>setRange(r)} key={r}>{r}</button>)}</div>{visibleEquity.length?<><div className="equity-stats"><div><span>LATEST NAV</span><b>{demo?inr(1449894):inr(final)}</b></div><div><span>{range} CHANGE</span><b>{pct(rangeTotal,2)}</b></div></div><EquityChart points={visibleEquity} demo={demo}/></>:<div className="empty"><h3>No equity history</h3><p>The NAV series is empty. The curve renders after the first published mark.</p></div>}</section>
     <section className="module signals-module"><SectionHead eyebrow="LIVE BOOK" title="Current signals" copy={demo?"Illustrative signals — do not trade on these.":"Latest actionable calls emitted by the scanner, newest first."} tag={`${signals.length} OPEN`}/>{signals.length?<ul>{signals.map(s=><li key={s.symbol}><div className="signal-copy"><div><b>{s.symbol}</b><em className={s.action.toLowerCase()}>{s.action}</em><span>{s.sector}</span></div><p>{s.note}</p><small>{s.date}</small></div><dl><div><dt>PRICE</dt><dd>{inr(s.price)}</dd></div><div><dt>STOP</dt><dd className="negative">{inr(s.stop)}</dd></div><div><dt>TARGET</dt><dd className="positive">{inr(s.target)}</dd></div><div className="conv"><dt>CONVICTION {s.conviction}</dt><dd><i style={{width:`${s.conviction}%`}}/></dd></div></dl></li>)}</ul>:<div className="empty"><h3>No open signals</h3><p>The strategy is flat. Fresh entries publish after the next scan.</p></div>}</section>
    </div>
    <div className="risk-grid">
