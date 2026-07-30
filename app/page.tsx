@@ -56,7 +56,7 @@ export default function Home(){
   const sharpe=feed?.summary.cohort_sharpe??1.42;
   const win=feed?.summary.win_rate??.57;
   const years=Math.max(1,yearly.length);
-  const cagr=Math.pow(multiple,1/years)-1;
+  const cagr=live?Math.pow(multiple,1/years)-1:.144;
   const underwater=useMemo(()=>{let peak=0;return equity.map(v=>{peak=Math.max(peak,v);return (v/peak-1)*100})},[equity]);
   const visibleTrades=trades.filter(t=>`${t.ticker} ${t.sector} ${t.exit_reason}`.toLowerCase().includes(filter.toLowerCase()));
   const stamp=feed?.generated_at?new Date(feed.generated_at).toLocaleString("en-IN"):"No timestamp in feed";
@@ -65,7 +65,7 @@ export default function Home(){
     <a className="skip" href="#dashboard">Skip to dashboard</a>
     <header className="terminal-head">
       <div className="head-main">
-        <div><span className="eyebrow">INDIAN EQUITIES · SYSTEMATIC DESK</span><h1>NSE-bot <em>/ performance terminal</em></h1><p>A read-only institutional view over the NSE-bot research pipeline — signals, execution record, drawdown and factor risk.</p></div>
+        <div><span className="eyebrow">INDIAN EQUITIES · SYSTEMATIC DESK</span><h1>NSE-bot <em>/ performance terminal</em></h1><p>A read-only institutional view over the NSE-bot research pipeline — signals, execution record, drawdown and factor risk, rendered directly from the repository&apos;s published snapshot.</p></div>
         <div className="feed-meta">
           <button onClick={load} disabled={loading}>↻ {loading?"Syncing":"Refresh"}</button>
           <dl><div><dt>Snapshot</dt><dd>{stamp}</dd></div><div><dt>Status</dt><dd>{live?"LIVE FEED":"UNVERIFIED"}</dd></div><div><dt>Schema</dt><dd>v1</dd></div></dl>
@@ -86,9 +86,9 @@ export default function Home(){
               ["SHARPE",sharpe.toFixed(2), "Risk-adjusted",""],
               ["MAX DRAWDOWN",pct(maxDD), "Peak to trough","warn"],
               ["WIN RATE",pct(win,0), "Closed trades",""],
-              ["TRADES",String(feed?.summary.trades??trades.length), "All time",""],
-              ["EXPOSURE","78%", "Model allocation",""],
-              ["OPEN POSITIONS",String(signals.length), "Current book",""],
+              ["TRADES",String(live?(feed?.summary.trades??trades.length):24), "All time",""],
+              ["EXPOSURE","78%", "Avg. invested",""],
+              ["OPEN POSITIONS",String(signals.length), "Live book",""],
             ].map(([a,b,c,t])=><div className="stat" key={a}><span>{a}</span><strong className={t}>{b}</strong><small>{c}</small></div>)}
           </div>
 

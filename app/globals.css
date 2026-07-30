@@ -11,3 +11,5 @@
 @media(max-width:1050px){.primary-grid,.lower-grid{grid-template-columns:1fr}.primary-grid aside{position:static;grid-template-columns:1fr 1fr}.stats{grid-template-columns:repeat(2,1fr)}.stat:nth-child(2n){border-right:0}.stat:nth-child(odd){border-right:1px solid var(--line)}}
 @media(max-width:680px){.head-main{padding:28px 18px;display:block}.head-main h1{font-size:42px}.head-main p{font-size:13px}.feed-meta{align-items:flex-start;min-width:0;margin-top:25px}.feed-meta dl div{justify-content:flex-start}.board{padding:20px 12px}.primary-grid aside{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.stat{min-height:112px;padding:14px}.stat strong{font-size:20px}.panel{padding:15px}.equity>svg{height:190px}.trades-head{display:block}.trades-head input{width:100%;margin-bottom:12px}.terminal-head .ticker{padding-left:18px}footer{padding:20px 18px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.head-main h1{font-size:clamp(40px,4vw,58px);line-height:1.05;white-space:nowrap}
+@media(max-width:1050px){.head-main h1{white-space:normal}}
