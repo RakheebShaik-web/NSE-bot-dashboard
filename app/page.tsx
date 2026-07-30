@@ -86,6 +86,10 @@ export default function Home() {
   const drawdowns=fullEquity.map(v=>{high=Math.max(high,v);const d=(v/high-1)*100;runningMax.push(high);return d;});
   const finalMultiple=feed?.summary.final_multiple ?? 5.12;
   const finalValue=100000*finalMultiple;
+  const elapsedYears=live && feed!.equity.length > 1
+    ? Math.max((new Date(feed!.equity.at(-1)!.date).getTime()-new Date(feed!.equity[0].date).getTime())/(365.25*864e5),1/12)
+    : 8;
+  const cagr=Math.pow(finalMultiple,1/elapsedYears)-1;
   const maxDD=feed?.summary.max_drawdown ?? -0.186;
   const sharpe=feed?.summary.cohort_sharpe ?? 1.31;
   const winRate=feed?.summary.win_rate ?? 0.61;
@@ -119,6 +123,7 @@ export default function Home() {
       </div></Shell>
       <div className="metric-stack">
         <Shell><div className="metric"><span>TOTAL RETURN</span><strong>{pct(finalMultiple-1)}</strong><small>{feed?.summary.trades ?? trades.length} completed trades</small></div></Shell>
+        <Shell><div className="metric"><span>ANNUALISED RETURN</span><strong>{pct(cagr)}</strong><small>{elapsedYears.toFixed(1)} year observation window</small></div></Shell>
         <Shell><div className="metric"><span>MAX DRAWDOWN</span><strong className="amber">{pct(maxDD)}</strong><small>Gap-aware stop model</small></div></Shell>
         <Shell><div className="metric"><span>SHARPE</span><strong>{sharpe.toFixed(2)}</strong><small>Win rate {(winRate*100).toFixed(1)}%</small></div></Shell>
       </div>
@@ -128,7 +133,7 @@ export default function Home() {
     <section className="section reveal"><div className="section-title"><div><span className="eyebrow">DOWNSIDE ANATOMY</span><h2>Drawdown, made visible.</h2></div><p>Underwater periods measured from the prior portfolio high.</p></div><Shell><div className="drawdown-core"><div className="dd-stat"><strong>{pct(maxDD)}</strong><span>WORST DECLINE</span></div><svg viewBox="0 0 1000 180"><line x1="12" x2="988" y1="18" y2="18" className="zero"/><polygon points={`12,18 ${drawdowns.map((v,i)=>`${12+i/Math.max(drawdowns.length-1,1)*976},${18+Math.abs(v)*7}`).join(" ")} 988,18`} className="dd-fill"/><polyline points={drawdowns.map((v,i)=>`${12+i/Math.max(drawdowns.length-1,1)*976},${18+Math.abs(v)*7}`).join(" ")} className="dd-line"/></svg></div></Shell></section>
 
     <section id="signals" className="section reveal"><div className="section-title"><div><span className="eyebrow">CURRENT SIGNALS</span><h2>What the bot sees now.</h2></div><p>Latest ranked entries exported by the strategy engine.</p></div><Shell><div className="table-wrap"><table><thead><tr>{["RANK","DATE","SYMBOL","SECTOR","SCORE","CLOSE","INITIAL STOP"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>
-      {feed?.signals.length?feed.signals.map(s=><tr key={`${s.date}-${s.ticker}`}><td>{s.rank}</td><td>{s.date}</td><td>{s.ticker}</td><td>{s.sector}</td><td>{s.score.toFixed(1)}</td><td>{money(s.close)}</td><td>{money(s.initial_stop)}</td></tr>):<tr><td colSpan={7}>No live signals exported yet.</td></tr>}
+      {feed?.signals.length?feed.signals.map(s=><tr key={`${s.date}-${s.ticker}`}><td><span className="rank-chip">{s.rank}</span></td><td>{s.date}</td><td><strong>{s.ticker}</strong></td><td>{s.sector}</td><td>{s.score.toFixed(1)}</td><td>{money(s.close)}</td><td>{money(s.initial_stop)}</td></tr>):<tr><td colSpan={7}>No live signals exported yet. The bot will populate this table after its next export.</td></tr>}
     </tbody></table></div></Shell></section>
 
     <section className="section split reveal"><div><span className="eyebrow">YEAR-BY-YEAR</span><h2>Consistency over spectacle.</h2><p className="lede">Negative years remain visible. Benchmark values appear when the bot feed includes them.</p></div><Shell><div className="year-table"><div className="year-row header"><span>YEAR</span><span>LEADER</span><span>NIFTY 50</span><span>ALPHA</span></div>{years.map(y=><div className="year-row" key={y.year}><strong>{y.year}</strong><span className={y.strategy>=0?"positive":"negative"}>{y.strategy>0?"+":""}{y.strategy.toFixed(1)}%</span><span>{y.nifty?`${y.nifty>0?"+":""}${y.nifty.toFixed(1)}%`:"—"}</span><b>{y.nifty?`${y.strategy-y.nifty>0?"+":""}${(y.strategy-y.nifty).toFixed(1)}%`:"—"}</b></div>)}</div></Shell></section>
