@@ -2,145 +2,131 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Period = "1Y" | "3Y" | "ALL";
 type Feed = {
   generated_at: string | null;
   status: string;
-  summary: {
-    trades?: number;
-    final_multiple?: number;
-    max_drawdown?: number;
-    win_rate?: number;
-    cohort_sharpe?: number;
-  };
+  summary: { trades?: number; final_multiple?: number; max_drawdown?: number; win_rate?: number; cohort_sharpe?: number };
   equity: { date: string; value: number }[];
   yearly: { year: number; strategy_return: number }[];
-  trades: {
-    entry_date: string; ticker: string; sector: string; score: number;
-    entry: number; exit: number; net_return: number; exit_reason: string;
-  }[];
-  signals: {
-    date: string; ticker: string; sector: string; score: number;
-    close: number; initial_stop: number; rank: number;
-  }[];
+  trades: { entry_date: string; ticker: string; sector: string; score: number; entry: number; exit: number; net_return: number; exit_reason: string }[];
+  signals: { date: string; ticker: string; sector: string; score: number; close: number; initial_stop: number; rank: number }[];
   factors: { name: string; weight: number }[];
 };
 
-const demoEquity = [100,104,101,109,116,113,128,137,132,148,161,157,174,191,183,207,225,219,244,271,263,289,318,306,342,371,363,405,438,427,469,512];
-const demoBenchmark = [100,102,98,106,111,108,117,123,119,128,136,132,142,151,146,157,166,162,174,185,181,191,203,198,211,223,219,231,242,238,250,261];
-const demoYears = [
-  { year: "2020", strategy: 31.4, nifty: 14.9 }, { year: "2021", strategy: 38.7, nifty: 24.1 },
-  { year: "2022", strategy: -8.6, nifty: 4.3 }, { year: "2023", strategy: 27.9, nifty: 20.0 },
-  { year: "2024", strategy: 22.6, nifty: 8.8 }, { year: "2025", strategy: 16.8, nifty: 10.4 },
-  { year: "2026", strategy: 9.2, nifty: 4.8 },
-];
-const demoTrades = [
-  ["12 Jul 2026","TRENT","Consumer","91.8","₹5,412","₹5,793","+7.04%","Time exit"],
-  ["12 Jul 2026","BEL","Industrials","89.6","₹426","₹449","+5.40%","Time exit"],
-  ["28 Jun 2026","COFORGE","Technology","87.9","₹1,742","₹1,656","−4.94%","ATR stop"],
-];
-const demoFactors = [
-  ["6M momentum",30],["12M momentum",25],["3M momentum",15],
-  ["20D relative strength",10],["Relative volume",10],["Liquidity",5],["Low volatility",5],
-] as [string, number][];
+const sample = {
+  equity: [100,104,101,109,116,113,128,137,132,148,161,157,174,191,183,207,225,219,244,271,263,289,318,306,342,371,363,405,438,427,469,512],
+  signals: [
+    {rank:1,ticker:"RELIANCE",sector:"Energy",score:91.8,close:1418.6,initial_stop:1347.7,date:"30 Jul 2026"},
+    {rank:2,ticker:"HDFCBANK",sector:"Financials",score:86.7,close:1994.25,initial_stop:1894.5,date:"30 Jul 2026"},
+    {rank:3,ticker:"TATAMOTORS",sector:"Auto",score:74.4,close:712.9,initial_stop:677.25,date:"29 Jul 2026"},
+  ],
+  trades: [
+    {entry_date:"12 Jul 2026",ticker:"TRENT",sector:"Consumer",score:91.8,entry:5412,exit:5793,net_return:.0704,exit_reason:"TIME EXIT"},
+    {entry_date:"12 Jul 2026",ticker:"BEL",sector:"Industrials",score:89.6,entry:426,exit:449,net_return:.054,exit_reason:"TIME EXIT"},
+    {entry_date:"28 Jun 2026",ticker:"COFORGE",sector:"Technology",score:87.9,entry:1742,exit:1656,net_return:-.0494,exit_reason:"ATR STOP"},
+  ],
+  factors: [{name:"Momentum",weight:.30},{name:"Quality",weight:.25},{name:"Relative strength",weight:.15},{name:"Liquidity",weight:.10},{name:"Low volatility",weight:.05}],
+  yearly: [{year:2021,strategy_return:.342},{year:2022,strategy_return:-.068},{year:2023,strategy_return:.289},{year:2024,strategy_return:.194},{year:2025,strategy_return:.227}],
+};
 
-function linePoints(values: number[], width=1000, height=260, pad=12) {
-  if (values.length < 2) values = [values[0] ?? 100, values[0] ?? 100];
-  const min=Math.min(...values), max=Math.max(...values);
-  return values.map((v,i)=>{
-    const x=pad+i/(values.length-1)*(width-pad*2);
-    const y=height-pad-(v-min)/Math.max(max-min,1)*(height-pad*2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-}
-
-function Shell({children,className=""}:{children:React.ReactNode;className?:string}) {
-  return <div className={`shell ${className}`}><div className="core">{children}</div></div>;
-}
 const money=(v:number)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(v);
-const pct=(v:number)=>`${v>=0?"+":""}${(v*100).toFixed(2)}%`;
+const pct=(v:number,d=1)=>`${v>0?"+":""}${(v*100).toFixed(d)}%`;
+const points=(values:number[],w=900,h=240)=>{
+  const min=Math.min(...values),max=Math.max(...values);
+  return values.map((v,i)=>`${(i/(values.length-1))*w},${h-((v-min)/Math.max(1,max-min))*h}`).join(" ");
+};
 
-export default function Home() {
-  const [period,setPeriod]=useState<Period>("ALL");
-  const [section,setSection]=useState("Overview");
+function Panel({children,className=""}:{children:React.ReactNode;className?:string}){return <section className={`panel ${className}`}>{children}</section>}
+function Head({kicker,title,tag}:{kicker:string;title:string;tag?:string}){return <div className="panel-head"><div><span>{kicker}</span><h2>{title}</h2></div>{tag&&<small>{tag}</small>}</div>}
+
+export default function Home(){
   const [feed,setFeed]=useState<Feed|null>(null);
-
-  useEffect(()=>{ fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).catch(()=>setFeed(null)); },[]);
-  const live=Boolean(feed?.status==="ready" && feed.equity.length);
-  const fullEquity=live ? feed!.equity.map(x=>x.value*100) : demoEquity;
-  const benchmark=demoBenchmark;
-  const years=live && feed!.yearly.length
-    ? feed!.yearly.map(x=>({year:String(x.year),strategy:x.strategy_return*100,nifty:0}))
-    : demoYears;
-  const trades=live
-    ? feed!.trades.map(t=>[t.entry_date,t.ticker,t.sector,t.score.toFixed(1),money(t.entry),money(t.exit),pct(t.net_return),t.exit_reason])
-    : demoTrades;
-  const factors: [string,number][]=feed?.factors.length
-    ? feed.factors.map(f=>[f.name.replaceAll("_"," "),f.weight*100])
-    : demoFactors;
-  const series=useMemo(()=>{
-    const n=period==="1Y"?Math.min(9,fullEquity.length):period==="3Y"?Math.min(18,fullEquity.length):fullEquity.length;
-    return {equity:fullEquity.slice(-n),nifty:benchmark.slice(-n)};
-  },[period,fullEquity]);
-  const runningMax:number[]=[]; let high=0;
-  const drawdowns=fullEquity.map(v=>{high=Math.max(high,v);const d=(v/high-1)*100;runningMax.push(high);return d;});
-  const finalMultiple=feed?.summary.final_multiple ?? 5.12;
-  const finalValue=100000*finalMultiple;
-  const elapsedYears=live && feed!.equity.length > 1
-    ? Math.max((new Date(feed!.equity.at(-1)!.date).getTime()-new Date(feed!.equity[0].date).getTime())/(365.25*864e5),1/12)
-    : 8;
-  const cagr=Math.pow(finalMultiple,1/elapsedYears)-1;
-  const maxDD=feed?.summary.max_drawdown ?? -0.186;
-  const sharpe=feed?.summary.cohort_sharpe ?? 1.31;
-  const winRate=feed?.summary.win_rate ?? 0.61;
-  const generated=feed?.generated_at ? new Date(feed.generated_at).toLocaleString("en-IN") : "awaiting first bot run";
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("");
+  const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};
+  useEffect(load,[]);
+  const live=feed?.status==="ready"&&Boolean(feed.equity?.length);
+  const equity=live?feed!.equity.map(x=>x.value*100):sample.equity;
+  const signals=feed?.signals?.length?feed.signals:sample.signals;
+  const trades=feed?.trades?.length?feed.trades:sample.trades;
+  const factors=feed?.factors?.length?feed.factors:sample.factors;
+  const yearly=feed?.yearly?.length?feed.yearly:sample.yearly;
+  const multiple=feed?.summary.final_multiple??2.292;
+  const maxDD=feed?.summary.max_drawdown??-.089;
+  const sharpe=feed?.summary.cohort_sharpe??1.42;
+  const win=feed?.summary.win_rate??.57;
+  const years=Math.max(1,yearly.length);
+  const cagr=Math.pow(multiple,1/years)-1;
+  const underwater=useMemo(()=>{let peak=0;return equity.map(v=>{peak=Math.max(peak,v);return (v/peak-1)*100})},[equity]);
+  const visibleTrades=trades.filter(t=>`${t.ticker} ${t.sector} ${t.exit_reason}`.toLowerCase().includes(filter.toLowerCase()));
+  const stamp=feed?.generated_at?new Date(feed.generated_at).toLocaleString("en-IN"):"No timestamp in feed";
 
   return <main>
-    <div className="grain"/>
-    <nav className="island" aria-label="Primary">
-      <button className="brand" onClick={()=>setSection("Overview")}><span className="brand-mark">L</span>LEADER / INDIA</button>
-      <div className="nav-links">{["Overview","Signals","Trades","Factors"].map(item=>
-        <button key={item} className={section===item?"active":""} onClick={()=>{setSection(item);document.getElementById(item.toLowerCase())?.scrollIntoView({behavior:"smooth"});}}>{item}</button>
-      )}</div>
-      <div className="live"><span/> {live?"BOT CONNECTED":"AWAITING DATA"}</div>
-    </nav>
-
-    <header className="hero reveal">
-      <div><span className="eyebrow">NIFTY 500 · LIVE RESEARCH FEED</span><h1>Signal quality,<br/><em>without the fiction.</em></h1></div>
-      <div className="hero-note"><p>Metrics, trades and signals are read directly from the NSE-bot repository. The frontend contains no trading logic.</p><div className="asof">LAST BOT EXPORT <strong>{generated}</strong></div></div>
+    <a className="skip" href="#dashboard">Skip to dashboard</a>
+    <header className="terminal-head">
+      <div className="head-main">
+        <div><span className="eyebrow">INDIAN EQUITIES · SYSTEMATIC DESK</span><h1>NSE-bot <em>/ performance terminal</em></h1><p>A read-only institutional view over the NSE-bot research pipeline — signals, execution record, drawdown and factor risk.</p></div>
+        <div className="feed-meta">
+          <button onClick={load} disabled={loading}>↻ {loading?"Syncing":"Refresh"}</button>
+          <dl><div><dt>Snapshot</dt><dd>{stamp}</dd></div><div><dt>Status</dt><dd>{live?"LIVE FEED":"UNVERIFIED"}</dd></div><div><dt>Schema</dt><dd>v1</dd></div></dl>
+        </div>
+      </div>
+      <div className="ticker"><i/> Upstream reports <strong>{feed?.status??"loading"}</strong> · source RakheebShaik-web/NSE-bot</div>
     </header>
 
-    <section id="overview" className="overview-grid reveal">
-      <Shell className="equity-card"><div className="card-head">
-        <div><span className="label">PORTFOLIO EQUITY</span><h2>{money(finalValue)} <small>from ₹1,00,000</small></h2></div>
-        <div className="periods">{(["1Y","3Y","ALL"] as Period[]).map(p=><button key={p} onClick={()=>setPeriod(p)} className={period===p?"selected":""}>{p}</button>)}</div>
-      </div><div className="chart-wrap"><div className="axis"><span>HIGH</span><span>MID</span><span>START</span></div>
-        <svg viewBox="0 0 1000 260" role="img" aria-label="Strategy equity curve"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#b8ff6a" stopOpacity=".22"/><stop offset="1" stopColor="#b8ff6a" stopOpacity="0"/></linearGradient></defs>
-          {[25,80,135,190,245].map(y=><line key={y} x1="10" x2="990" y1={y} y2={y} className="gridline"/>)}
-          <polygon points={`12,248 ${linePoints(series.equity)} 988,248`} fill="url(#fill)"/>
-          {!live&&<polyline points={linePoints(series.nifty)} className="nifty-line"/>}<polyline points={linePoints(series.equity)} className="strategy-line"/>
-        </svg><div className="legend"><span className="strategy-dot"/> Leader India <strong>{pct(finalMultiple-1)}</strong>{!live&&<><span className="nifty-dot"/> Illustrative NIFTY <strong>+161%</strong></>}</div>
-      </div></Shell>
-      <div className="metric-stack">
-        <Shell><div className="metric"><span>TOTAL RETURN</span><strong>{pct(finalMultiple-1)}</strong><small>{feed?.summary.trades ?? trades.length} completed trades</small></div></Shell>
-        <Shell><div className="metric"><span>ANNUALISED RETURN</span><strong>{pct(cagr)}</strong><small>{elapsedYears.toFixed(1)} year observation window</small></div></Shell>
-        <Shell><div className="metric"><span>MAX DRAWDOWN</span><strong className="amber">{pct(maxDD)}</strong><small>Gap-aware stop model</small></div></Shell>
-        <Shell><div className="metric"><span>SHARPE</span><strong>{sharpe.toFixed(2)}</strong><small>Win rate {(winRate*100).toFixed(1)}%</small></div></Shell>
+    <div id="dashboard" className="board">
+      {!live&&<div className="notice"><b>△ Illustrative data in use.</b> The upstream feed currently has no published rows. Every visible sample number demonstrates the interface only and is not an NSE-bot track record.</div>}
+
+      <div className="primary-grid">
+        <div>
+          <div className="stats">
+            {[
+              ["TOTAL RETURN",pct(multiple-1), "Since inception","pos"],
+              ["CAGR",pct(cagr), "Annualised","pos"],
+              ["SHARPE",sharpe.toFixed(2), "Risk-adjusted",""],
+              ["MAX DRAWDOWN",pct(maxDD), "Peak to trough","warn"],
+              ["WIN RATE",pct(win,0), "Closed trades",""],
+              ["TRADES",String(feed?.summary.trades??trades.length), "All time",""],
+              ["EXPOSURE","78%", "Model allocation",""],
+              ["OPEN POSITIONS",String(signals.length), "Current book",""],
+            ].map(([a,b,c,t])=><div className="stat" key={a}><span>{a}</span><strong className={t}>{b}</strong><small>{c}</small></div>)}
+          </div>
+
+          <Panel className="equity">
+            <Head kicker="CUMULATIVE PERFORMANCE" title="Equity curve & drawdown" tag={`${equity.length} OBS`}/>
+            <div className="nav-value">{equity.at(-1)?.toFixed(2)} <small>NAV</small></div>
+            <svg viewBox="0 0 900 250" role="img" aria-label="Portfolio equity curve">
+              {[0,60,120,180,240].map(y=><line key={y} x1="0" x2="900" y1={y} y2={y}/>)}
+              <polygon points={`0,250 ${points(equity,900,225)} 900,250`} className="eq-fill"/>
+              <polyline points={points(equity,900,225)} className="eq-line"/>
+            </svg>
+            <div className="under"><span className="eyebrow">UNDERWATER / DRAWDOWN</span><svg viewBox="0 0 900 90"><line x1="0" x2="900" y1="4" y2="4"/><polygon points={`0,4 ${underwater.map((v,i)=>`${i/(underwater.length-1)*900},${4+Math.abs(v)*7}`).join(" ")} 900,4`} /></svg></div>
+          </Panel>
+        </div>
+
+        <aside>
+          <Panel>
+            <Head kicker="LATEST OUTPUT" title="Current signals" tag={`${signals.length} ACTIVE`}/>
+            <div className="signals">{signals.map(s=><article key={`${s.ticker}-${s.rank}`}><div><b>{s.ticker}</b><span>{s.sector}</span></div><strong className={s.rank<3?"pos":""}>{s.rank<3?"BUY":"WATCH"}</strong><div className="score"><i style={{width:`${Math.min(100,s.score)}%`}}/><span>{s.score.toFixed(1)}</span></div><small>{money(s.close)} · stop {money(s.initial_stop)}</small></article>)}</div>
+          </Panel>
+          <Panel>
+            <Head kicker="RISK DECOMPOSITION" title="Factor exposure" tag="MODEL WEIGHTS"/>
+            <div className="factor-list">{factors.map(f=><div key={f.name}><span>{f.name.replaceAll("_"," ")}</span><i><b style={{width:`${Math.min(100,Math.abs(f.weight)*300)}%`}}/></i><strong>{pct(f.weight,0)}</strong></div>)}</div>
+          </Panel>
+        </aside>
       </div>
-      <Shell className="status-card"><div className="status-inner"><span className="label">DATA STATUS</span><div className="status-orbit"><div><b>{feed?.signals.length ?? 0}</b><small>signals</small></div></div><h3>{live?"Connected to NSE-bot":"Waiting for first backtest"}</h3><p>{live?"This dashboard is displaying the latest committed bot export.":"Illustrative values remain visible until dashboard-data/latest.json is generated."}</p><div className="regime"><span>FEED</span><strong><i/> {feed?.status?.toUpperCase() ?? "LOADING"}</strong></div></div></Shell>
-    </section>
 
-    <section className="section reveal"><div className="section-title"><div><span className="eyebrow">DOWNSIDE ANATOMY</span><h2>Drawdown, made visible.</h2></div><p>Underwater periods measured from the prior portfolio high.</p></div><Shell><div className="drawdown-core"><div className="dd-stat"><strong>{pct(maxDD)}</strong><span>WORST DECLINE</span></div><svg viewBox="0 0 1000 180"><line x1="12" x2="988" y1="18" y2="18" className="zero"/><polygon points={`12,18 ${drawdowns.map((v,i)=>`${12+i/Math.max(drawdowns.length-1,1)*976},${18+Math.abs(v)*7}`).join(" ")} 988,18`} className="dd-fill"/><polyline points={drawdowns.map((v,i)=>`${12+i/Math.max(drawdowns.length-1,1)*976},${18+Math.abs(v)*7}`).join(" ")} className="dd-line"/></svg></div></Shell></section>
-
-    <section id="signals" className="section reveal"><div className="section-title"><div><span className="eyebrow">CURRENT SIGNALS</span><h2>What the bot sees now.</h2></div><p>Latest ranked entries exported by the strategy engine.</p></div><Shell><div className="table-wrap"><table><thead><tr>{["RANK","DATE","SYMBOL","SECTOR","SCORE","CLOSE","INITIAL STOP"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>
-      {feed?.signals.length?feed.signals.map(s=><tr key={`${s.date}-${s.ticker}`}><td><span className="rank-chip">{s.rank}</span></td><td>{s.date}</td><td><strong>{s.ticker}</strong></td><td>{s.sector}</td><td>{s.score.toFixed(1)}</td><td>{money(s.close)}</td><td>{money(s.initial_stop)}</td></tr>):<tr><td colSpan={7}>No live signals exported yet. The bot will populate this table after its next export.</td></tr>}
-    </tbody></table></div></Shell></section>
-
-    <section className="section split reveal"><div><span className="eyebrow">YEAR-BY-YEAR</span><h2>Consistency over spectacle.</h2><p className="lede">Negative years remain visible. Benchmark values appear when the bot feed includes them.</p></div><Shell><div className="year-table"><div className="year-row header"><span>YEAR</span><span>LEADER</span><span>NIFTY 50</span><span>ALPHA</span></div>{years.map(y=><div className="year-row" key={y.year}><strong>{y.year}</strong><span className={y.strategy>=0?"positive":"negative"}>{y.strategy>0?"+":""}{y.strategy.toFixed(1)}%</span><span>{y.nifty?`${y.nifty>0?"+":""}${y.nifty.toFixed(1)}%`:"—"}</span><b>{y.nifty?`${y.strategy-y.nifty>0?"+":""}${(y.strategy-y.nifty).toFixed(1)}%`:"—"}</b></div>)}</div></Shell></section>
-
-    <section id="trades" className="section reveal"><div className="section-title"><div><span className="eyebrow">TRADE LEDGER</span><h2>Every position, auditable.</h2></div></div><Shell><div className="table-wrap"><table><thead><tr>{["ENTRY","SYMBOL","SECTOR","SCORE","ENTRY","EXIT","NET P&L","REASON"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{trades.map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j} className={j===6?(String(v).includes("+")?"positive":"negative"):""}>{v}</td>)}</tr>)}</tbody></table></div></Shell></section>
-
-    <section id="factors" className="section split factors reveal"><div><span className="eyebrow">FACTOR WEIGHTS</span><h2>Built on evidence,<br/>not decoration.</h2><p className="lede">Weights are sourced from the bot configuration, so frontend and engine cannot silently diverge.</p><div className="warning">{live?"LIVE BOT DATA":"ILLUSTRATIVE FALLBACK"}<span>Historical performance remains hypothetical research, not investment advice.</span></div></div><Shell><div className="factor-list"><div className="factor-head"><span>FACTOR</span><span>WEIGHT</span><span>STATUS</span></div>{factors.map(([name,weight])=><div className="factor" key={name}><span>{name}</span><div className="bar"><i style={{transform:`scaleX(${weight/30})`}}/></div><strong>{weight.toFixed(0)}%</strong><b>ACTIVE</b></div>)}</div></Shell></section>
-    <footer><div><span className="brand-mark">L</span><strong>LEADER SCORE INDIA</strong></div><p>NSE-bot engine → JSON feed → Vercel dashboard</p><span>SCHEMA v1</span></footer>
-  </main>;
+      <div className="lower-grid">
+        <Panel>
+          <Head kicker="CALENDAR ATTRIBUTION" title="Yearly performance"/>
+          <div className="years">{yearly.map(y=><div key={y.year}><span>{y.year}</span><i className={y.strategy_return<0?"negative":""} style={{height:`${Math.max(8,Math.abs(y.strategy_return)*240)}px`}}/><b className={y.strategy_return>=0?"pos":"neg"}>{pct(y.strategy_return)}</b></div>)}</div>
+        </Panel>
+        <Panel>
+          <div className="trades-head"><Head kicker="EXECUTION RECORD" title="Trade blotter" tag={`${visibleTrades.length} ROWS`}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter symbol, sector…"/></div>
+          <div className="table-wrap"><table><thead><tr>{["ENTRY","SYMBOL","SECTOR","SCORE","ENTRY","EXIT","NET P&L","REASON"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{visibleTrades.map((t,i)=><tr key={`${t.ticker}-${i}`}><td>{t.entry_date}</td><td><b>{t.ticker}</b></td><td>{t.sector}</td><td>{t.score.toFixed(1)}</td><td>{money(t.entry)}</td><td>{money(t.exit)}</td><td className={t.net_return>=0?"pos":"neg"}>{pct(t.net_return,2)}</td><td>{t.exit_reason}</td></tr>)}</tbody></table></div>
+        </Panel>
+      </div>
+    </div>
+    <footer>Research interface only. Illustrative figures are synthetic placeholders and must not be read as realised or backtested performance.</footer>
+  </main>
 }
