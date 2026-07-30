@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useState} from "react";
 
 type Feed={generated_at:string|null;status:string;summary:{trades?:number;final_multiple?:number;max_drawdown?:number;win_rate?:number;cohort_sharpe?:number};equity:{date:string;value:number}[];yearly:{year:number;strategy_return:number}[];trades:{entry_date:string;ticker:string;sector:string;score:number;entry:number;exit:number;net_return:number;exit_reason:string}[];signals:{date:string;ticker:string;sector:string;score:number;close:number;initial_stop:number;rank:number}[];factors:{name:string;weight:number}[]};
 type Trade={symbol:string;side:string;entryDate:string;exitDate:string;entry:number;exit:number;qty:number;ret:number;pnl:number;days:number;reason:string};
@@ -45,23 +45,46 @@ const sampleSignals:Signal[]=[
 ].map(s=>({symbol:s[0],action:s[1],sector:s[2],date:s[3],price:s[4],stop:s[5],target:s[6],conviction:s[7],note:s[8]} as Signal));
 const sampleYears=[["2019",.246,58,.69,-.204,.89],["2020",-.084,67,.62,-.211,1.25],["2021",.412,65,.53,-.203,1.69],["2022",.069,37,.70,-.112,1.91],["2023",.287,47,.59,-.197,1.95],["2024",.173,66,.64,-.164,1.66],["2025",.114,51,.62,-.093,.94]];
 const sampleFactors=[["Momentum (12-1)","Primary alpha driver",.82,.094],["Quality (ROE)","Balance-sheet screen",.41,.031],["Low Volatility","Structural tilt away",-.18,-.009],["Value (EV/EBITDA)","Mild cheapness bias",.12,.012],["Size (SMID)","Mid-cap skew",.36,.026],["Liquidity","Turnover constraint",-.24,-.004]];
-function makeEquity(){let v=1000000,peak=v;return Array.from({length:320},(_,i)=>{v*=1+.00115+Math.sin(i/9)*.006+Math.cos(i/21)*.004+(i%67===0?-.065:0);peak=Math.max(peak,v);return{value:v,dd:v/peak-1}})}
+type EquityPoint={date:string;value:number;dd:number};
+function makeEquity(){let v=1000000;const raw=Array.from({length:320},(_,i)=>{v*=1+.00115+Math.sin(i/9)*.006+Math.cos(i/21)*.004+(i%67===0?-.065:0);const date=new Date(2019,4,24+i*8);return{date:date.toISOString(),value:v,dd:0}});const targetFinal=1449894,targetMultiple=1.4418,targetStart=targetFinal/targetMultiple,rawMultiple=raw.at(-1)!.value/raw[0].value,power=Math.log(targetMultiple)/Math.log(rawMultiple);let peak=0;return raw.map(p=>{const value=targetStart*Math.pow(p.value/raw[0].value,power);peak=Math.max(peak,value);return{...p,value,dd:value/peak-1}})}
 const sampleEquity=makeEquity();
 const inr=(n:number,d=0)=>`${n<0?"-":""}₹${Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d})}`;
 const pct=(n:number,d=1)=>`${n>0?"+":""}${(n*100).toFixed(d)}%`;
 const line=(v:number[],w=1000,h=360)=>{const lo=Math.min(...v),hi=Math.max(...v);return v.map((x,i)=>`${i/(v.length-1)*w},${h-(x-lo)/Math.max(1,hi-lo)*h}`).join(" ")};
 function SectionHead({eyebrow,title,copy,tag}:{eyebrow:string;title:string;copy:string;tag?:string}){return <header className="section-head"><div><span>{eyebrow}</span><h2>{title}</h2><p>{copy}</p></div>{tag&&<b>{tag}</b>}</header>}
+function EquityChart({points,demo}:{points:EquityPoint[];demo:boolean}){
+ const[hover,setHover]=useState<number|null>(null);
+ const values=points.map(p=>p.value),lo=Math.min(...values),hi=Math.max(...values),span=Math.max(1,hi-lo);
+ const x=(i:number)=>i/Math.max(1,points.length-1)*1000,y=(v:number)=>360-(v-lo)/span*330;
+ const idx=hover??points.length-1,point=points[idx],first=points[0]?.value??1,change=point?point.value/first-1:0;
+ const onMove=(e:React.PointerEvent<SVGSVGElement>)=>{const r=e.currentTarget.getBoundingClientRect();setHover(Math.max(0,Math.min(points.length-1,Math.round(((e.clientX-r.left)/r.width)*(points.length-1)))))};
+ return <div className="chart-shell" onPointerLeave={()=>setHover(null)}>
+  <svg viewBox="0 0 1000 390" role="img" aria-label="Portfolio equity curve" onPointerMove={onMove}>
+   <defs><linearGradient id="navfill" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#b9ed18" stopOpacity=".2"/><stop offset="1" stopColor="#b9ed18" stopOpacity="0"/></linearGradient></defs>
+   {[30,140,250,360].map(v=><line className="grid-line" key={v} x1="0" x2="1000" y1={v} y2={v}/>)}
+   <polygon points={`0,390 ${values.map((v,i)=>`${x(i)},${y(v)}`).join(" ")} 1000,390`} fill="url(#navfill)"/>
+   <polyline className="equity-line" points={values.map((v,i)=>`${x(i)},${y(v)}`).join(" ")}/>
+   {hover!==null&&point&&<g className="chart-focus"><line x1={x(idx)} x2={x(idx)} y1="0" y2="390"/><line x1="0" x2="1000" y1={y(point.value)} y2={y(point.value)}/><circle cx={x(idx)} cy={y(point.value)} r="6"/></g>}
+  </svg>
+  {hover!==null&&point&&<div className={`chart-tooltip ${x(idx)>760?"left":""}`} style={{left:`${x(idx)/10}%`,top:`${Math.max(4,y(point.value)/3.9)}%`}}>
+   <span>{new Date(point.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</span>
+   <strong>{demo?inr(point.value):inr(point.value)}</strong>
+   <em className={change>=0?"positive":"negative"}>{pct(change,2)} from range start</em>
+  </div>}
+ </div>
+}
 
 export default function Home(){
  const[feed,setFeed]=useState<Feed|null>(null),[loading,setLoading]=useState(true),[sample,setSample]=useState(false),[range,setRange]=useState("ALL"),[filter,setFilter]=useState(""),[outcome,setOutcome]=useState("all"),[sort,setSort]=useState("Recent"),[shown,setShown]=useState(25);
  const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};useEffect(load,[]);
  const live=feed?.status==="ready"&&Boolean(feed.equity?.length),demo=!live&&sample;
- const equity=live?feed!.equity.map(x=>({value:x.value*1000000,dd:0})):demo?sampleEquity:[];
+ const equity:EquityPoint[]=live?feed!.equity.map(x=>({date:x.date,value:x.value*1000000,dd:0})):demo?sampleEquity:[];
  let peak=0;equity.forEach(x=>{peak=Math.max(peak,x.value);x.dd=x.value/peak-1});
  const signals:Signal[]=live?feed!.signals.map(s=>({symbol:s.ticker,action:"BUY",sector:s.sector,date:s.date,price:s.close,stop:s.initial_stop,target:s.close*1.14,conviction:s.score,note:"Systematic entry cleared the strategy filters."})):demo?sampleSignals:[];
  const trades:Trade[]=live?feed!.trades.map(t=>({symbol:t.ticker,side:"LONG",entryDate:t.entry_date,exitDate:"Closed",entry:t.entry,exit:t.exit,qty:0,ret:t.net_return,pnl:(t.exit-t.entry),days:0,reason:t.exit_reason})):demo?allSampleTrades:[];
  const rows=trades.filter(t=>t.symbol.toLowerCase().includes(filter.toLowerCase())&&(outcome==="all"||outcome==="wins"&&t.ret>0||outcome==="losses"&&t.ret<0)).sort((a,b)=>sort==="Return"?b.ret-a.ret:sort==="P&L"?b.pnl-a.pnl:sort==="Symbol"?a.symbol.localeCompare(b.symbol):0);
- const eqValues=equity.map(x=>x.value),dds=equity.map(x=>x.dd),final=eqValues.at(-1)??0,total=demo?.442:final?final/eqValues[0]-1:0;
+ const rangeSize=demo?({ALL:equity.length,"5Y":260,"3Y":156,"1Y":52}[range]??equity.length):({ALL:equity.length,"5Y":1260,"3Y":756,"1Y":252}[range]??equity.length);
+ const visibleEquity=equity.slice(-rangeSize),eqValues=visibleEquity.map(x=>x.value),dds=equity.map(x=>x.dd),final=eqValues.at(-1)??0,total=demo&&range==="ALL"?0.4418:final&&eqValues[0]?final/eqValues[0]-1:0;
  return <main>
   <a className="skip" href="#main">Skip to content</a>
   <header className="command"><div className="pulse-logo">⌁</div><div className="brand-copy"><h1>NSE-bot <em>/ Research Terminal</em></h1><p>INDIAN EQUITIES · SYSTEMATIC LONG BOOK · SCHEMA V1</p></div><div className={`mode ${demo?"sample":live?"live":""}`}><i/>{demo?"SAMPLE MODE":live?"LIVE":"AWAITING DATA"}</div><div className="stamp">NO TIMESTAMP · 0S AGO</div><button onClick={load}>↻</button></header>
@@ -70,7 +93,7 @@ export default function Home(){
    {demo&&<div className="sample-alert"><b>△ ILLUSTRATIVE SAMPLE</b> — synthetic figures generated in-browser to demonstrate layout. Not verified, not backtested, not the NSE-bot track record.</div>}
    <section className="kpis">{[["TOTAL RETURN",demo?"+44.2%":live?pct(total):"—",demo?"NAV ₹14.5L":"since inception","positive"],["MAX DRAWDOWN",demo?"-17.3%":live?pct(Math.min(...dds)):"—","peak-to-trough","negative"],["SHARPE",demo?"1.32":live?String(feed?.summary.cohort_sharpe??"—"):"—",demo?"Sortino 1.86":"Sortino —",""],["WIN RATE",demo?"60.3%":live?pct(feed?.summary.win_rate??0):"—",demo?"41 of 68 closed":"0 of — closed","positive"],["CLOSED TRADES",demo?"68":live?String(trades.length):"0",demo?"PF 1.74":"PF —",""]].map(x=><div key={x[0]}><span>{x[0]}</span><strong className={x[3]}>{x[1]}</strong><small>{x[2]}</small></div>)}</section>
    <div className="hero-grid">
-    <section className="module equity-module"><SectionHead eyebrow="PORTFOLIO" title="Equity curve" copy={demo?"Illustrative sample series — not verified performance.":"Mark-to-market net asset value published by the strategy runner."}/><div className="ranges">{["1Y","3Y","5Y","ALL"].map(r=><button className={range===r?"active":""} onClick={()=>setRange(r)} key={r}>{r}</button>)}</div>{equity.length?<><div className="equity-stats"><div><span>LATEST NAV</span><b>{demo?inr(1449894):inr(final)}</b></div><div><span>{range} CHANGE</span><b>{demo?"+44.18%":pct(total,2)}</b></div></div><svg viewBox="0 0 1000 390"><defs><linearGradient id="navfill" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#b9ed18" stopOpacity=".2"/><stop offset="1" stopColor="#b9ed18" stopOpacity="0"/></linearGradient></defs>{[40,140,240,340].map(y=><line key={y} x1="0" x2="1000" y1={y} y2={y}/>)}<polygon points={`0,390 ${line(eqValues,1000,360)} 1000,390`} fill="url(#navfill)"/><polyline points={line(eqValues,1000,360)}/></svg></>:<div className="empty"><h3>No equity history</h3><p>The NAV series is empty. The curve renders after the first published mark.</p></div>}</section>
+    <section className="module equity-module"><SectionHead eyebrow="PORTFOLIO" title="Equity curve" copy={demo?"Illustrative sample series — not verified performance.":"Mark-to-market net asset value published by the strategy runner."}/><div className="ranges">{["1Y","3Y","5Y","ALL"].map(r=><button className={range===r?"active":""} onClick={()=>setRange(r)} key={r}>{r}</button>)}</div>{visibleEquity.length?<><div className="equity-stats"><div><span>LATEST NAV</span><b>{demo?inr(1449894):inr(final)}</b></div><div><span>{range} CHANGE</span><b>{pct(total,2)}</b></div></div><EquityChart points={visibleEquity} demo={demo}/></>:<div className="empty"><h3>No equity history</h3><p>The NAV series is empty. The curve renders after the first published mark.</p></div>}</section>
     <section className="module signals-module"><SectionHead eyebrow="LIVE BOOK" title="Current signals" copy={demo?"Illustrative signals — do not trade on these.":"Latest actionable calls emitted by the scanner, newest first."} tag={`${signals.length} OPEN`}/>{signals.length?<ul>{signals.map(s=><li key={s.symbol}><div className="signal-copy"><div><b>{s.symbol}</b><em className={s.action.toLowerCase()}>{s.action}</em><span>{s.sector}</span></div><p>{s.note}</p><small>{s.date}</small></div><dl><div><dt>PRICE</dt><dd>{inr(s.price)}</dd></div><div><dt>STOP</dt><dd className="negative">{inr(s.stop)}</dd></div><div><dt>TARGET</dt><dd className="positive">{inr(s.target)}</dd></div><div className="conv"><dt>CONVICTION {s.conviction}</dt><dd><i style={{width:`${s.conviction}%`}}/></dd></div></dl></li>)}</ul>:<div className="empty"><h3>No open signals</h3><p>The strategy is flat. Fresh entries publish after the next scan.</p></div>}</section>
    </div>
    <div className="risk-grid">
