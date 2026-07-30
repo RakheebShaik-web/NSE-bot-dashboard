@@ -43,6 +43,7 @@ export default function Home(){
   const [feed,setFeed]=useState<Feed|null>(null);
   const [loading,setLoading]=useState(true);
   const [filter,setFilter]=useState("");
+  const [tradeView,setTradeView]=useState<"ALL"|"OPEN"|"CLOSED">("ALL");
   const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};
   useEffect(load,[]);
   const live=feed?.status==="ready"&&Boolean(feed.equity?.length);
@@ -58,7 +59,11 @@ export default function Home(){
   const years=Math.max(1,yearly.length);
   const cagr=live?Math.pow(multiple,1/years)-1:.144;
   const underwater=useMemo(()=>{let peak=0;return equity.map(v=>{peak=Math.max(peak,v);return (v/peak-1)*100})},[equity]);
-  const visibleTrades=trades.filter(t=>`${t.ticker} ${t.sector} ${t.exit_reason}`.toLowerCase().includes(filter.toLowerCase()));
+  const visibleTrades=trades.filter(t=>{
+    const text=`${t.ticker} ${t.sector} ${t.exit_reason}`.toLowerCase().includes(filter.toLowerCase());
+    const status=tradeView==="ALL"||tradeView==="CLOSED";
+    return text&&status;
+  });
   const stamp=feed?.generated_at?new Date(feed.generated_at).toLocaleString("en-IN"):"No timestamp in feed";
 
   return <main>
@@ -67,6 +72,7 @@ export default function Home(){
       <div className="head-main">
         <div><span className="eyebrow">INDIAN EQUITIES · SYSTEMATIC DESK</span><h1>NSE-bot <em>/ performance terminal</em></h1><p>A read-only institutional view over the NSE-bot research pipeline — signals, execution record, drawdown and factor risk, rendered directly from the repository&apos;s published snapshot.</p></div>
         <div className="feed-meta">
+          <a className="blotter-link" href="#trade-blotter">View trade blotter ↓</a>
           <button onClick={load} disabled={loading}>↻ {loading?"Syncing":"Refresh"}</button>
           <dl><div><dt>Snapshot</dt><dd>{stamp}</dd></div><div><dt>Status</dt><dd>{live?"LIVE FEED":"UNVERIFIED"}</dd></div><div><dt>Schema</dt><dd>v1</dd></div></dl>
         </div>
@@ -121,8 +127,13 @@ export default function Home(){
           <Head kicker="CALENDAR ATTRIBUTION" title="Yearly performance"/>
           <div className="years">{yearly.map(y=><div key={y.year}><span>{y.year}</span><i className={y.strategy_return<0?"negative":""} style={{height:`${Math.max(8,Math.abs(y.strategy_return)*240)}px`}}/><b className={y.strategy_return>=0?"pos":"neg"}>{pct(y.strategy_return)}</b></div>)}</div>
         </Panel>
-        <Panel>
-          <div className="trades-head"><Head kicker="EXECUTION RECORD" title="Trade blotter" tag={`${visibleTrades.length} ROWS`}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter symbol, sector…"/></div>
+        <Panel className="trade-panel">
+          <div id="trade-blotter" className="anchor"/>
+          <div className="trades-head"><Head kicker="EXECUTION RECORD" title="Trade blotter" tag={`${visibleTrades.length} TRADES`}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter symbol, sector…"/></div>
+          <div className="blotter-controls" role="group" aria-label="Filter trades by status">
+            {(["ALL","OPEN","CLOSED"] as const).map(v=><button key={v} className={tradeView===v?"selected":""} onClick={()=>setTradeView(v)}>{v}</button>)}
+            <span>{tradeView==="OPEN"?"No open positions in the current feed":"Completed NSE-bot executions"}</span>
+          </div>
           <div className="table-wrap"><table><thead><tr>{["ENTRY","SYMBOL","SECTOR","SCORE","ENTRY","EXIT","NET P&L","REASON"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{visibleTrades.map((t,i)=><tr key={`${t.ticker}-${i}`}><td>{t.entry_date}</td><td><b>{t.ticker}</b></td><td>{t.sector}</td><td>{t.score.toFixed(1)}</td><td>{money(t.entry)}</td><td>{money(t.exit)}</td><td className={t.net_return>=0?"pos":"neg"}>{pct(t.net_return,2)}</td><td>{t.exit_reason}</td></tr>)}</tbody></table></div>
         </Panel>
       </div>
