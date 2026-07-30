@@ -1,175 +1,89 @@
 "use client";
+import {useEffect,useMemo,useState} from "react";
 
-import { useEffect, useMemo, useState } from "react";
+type Feed={generated_at:string|null;status:string;summary:{trades?:number;final_multiple?:number;max_drawdown?:number;win_rate?:number;cohort_sharpe?:number};equity:{date:string;value:number}[];yearly:{year:number;strategy_return:number}[];trades:{entry_date:string;ticker:string;sector:string;score:number;entry:number;exit:number;net_return:number;exit_reason:string}[];signals:{date:string;ticker:string;sector:string;score:number;close:number;initial_stop:number;rank:number}[];factors:{name:string;weight:number}[]};
+type Trade={symbol:string;side:string;entryDate:string;exitDate:string;entry:number;exit:number;qty:number;ret:number;pnl:number;days:number;reason:string};
+type Signal={symbol:string;action:string;sector:string;date:string;price:number;stop:number;target:number;conviction:number;note:string};
 
-type Feed = {
-  generated_at: string | null;
-  status: string;
-  summary: { trades?: number; final_multiple?: number; max_drawdown?: number; win_rate?: number; cohort_sharpe?: number };
-  equity: { date: string; value: number }[];
-  yearly: { year: number; strategy_return: number }[];
-  trades: { entry_date: string; ticker: string; sector: string; score: number; entry: number; exit: number; net_return: number; exit_reason: string }[];
-  signals: { date: string; ticker: string; sector: string; score: number; close: number; initial_stop: number; rank: number }[];
-  factors: { name: string; weight: number }[];
-};
-type BlotterRow={symbol:string;side:"LONG"|"SHORT";entryDate:string;exitDate:string|null;qty:number;entry:number;exit:number|null;pnl:number|null;ret:number|null};
-
-const sample = {
-  equity: [100,104,101,109,116,113,128,137,132,148,161,157,174,191,183,207,225,219,244,271,263,289,318,306,342,371,363,405,438,427,469,512],
-  signals: [
-    {rank:1,ticker:"RELIANCE",sector:"Energy",score:91.8,close:1418.6,initial_stop:1347.7,date:"30 Jul 2026"},
-    {rank:2,ticker:"HDFCBANK",sector:"Financials",score:86.7,close:1994.25,initial_stop:1894.5,date:"30 Jul 2026"},
-    {rank:3,ticker:"TATAMOTORS",sector:"Auto",score:74.4,close:712.9,initial_stop:677.25,date:"29 Jul 2026"},
-  ],
-  trades: [
-    {entry_date:"12 Jul 2026",ticker:"TRENT",sector:"Consumer",score:91.8,entry:5412,exit:5793,net_return:.0704,exit_reason:"TIME EXIT"},
-    {entry_date:"12 Jul 2026",ticker:"BEL",sector:"Industrials",score:89.6,entry:426,exit:449,net_return:.054,exit_reason:"TIME EXIT"},
-    {entry_date:"28 Jun 2026",ticker:"COFORGE",sector:"Technology",score:87.9,entry:1742,exit:1656,net_return:-.0494,exit_reason:"ATR STOP"},
-  ],
-  factors: [{name:"Momentum",weight:.30},{name:"Quality",weight:.25},{name:"Relative strength",weight:.15},{name:"Liquidity",weight:.10},{name:"Low volatility",weight:.05}],
-  yearly: [{year:2021,strategy_return:.342},{year:2022,strategy_return:-.068},{year:2023,strategy_return:.289},{year:2024,strategy_return:.194},{year:2025,strategy_return:.227}],
-};
-const sampleBlotter:BlotterRow[]=[
-["JSWSTEEL","LONG","14 Dec 25","18 Dec 25",168,1987,1990.97,667,.002],
-["MARUTI","LONG","05 Dec 25","09 Dec 25",131,1094,1081.2,-1677,-.012],
-["RELIANCE","LONG","03 Dec 25",null,25,480,null,null,null],
-["RELIANCE","LONG","15 Nov 25","19 Nov 25",181,2124,2357.64,42289,.11],
-["JSWSTEEL","LONG","06 Nov 25","10 Nov 25",144,1231,1364.69,19251,.109],
-["HDFCBANK","LONG","04 Nov 25",null,38,617,null,null,null],
-["HDFCBANK","LONG","16 Oct 25","20 Oct 25",194,2261,2274.11,2543,.006],
-["INFY","LONG","05 Oct 25",null,51,754,null,null,null],
-["INFY","LONG","17 Sept 25","21 Sept 25",27,2398,2217.43,-4875,-.075],
-["LT","SHORT","06 Sept 25","10 Sept 25",64,891,827.74,-4049,-.071],
-["LT","LONG","18 Aug 25","22 Aug 25",40,2535,2661.24,5050,.05],
-["TATAMOTORS","LONG","07 Aug 25","11 Aug 25",77,1028,1092.15,4940,.062],
-["TATAMOTORS","LONG","19 Jul 25","23 Jul 25",53,2672,2935.73,13978,.099],
-["SUNPHARMA","LONG","08 Jul 25","12 Jul 25",90,1165,1271.13,9552,.091],
-["SUNPHARMA","SHORT","20 Jun 25","24 Jun 25",66,2809,2699.45,-7230,-.039],
-["ICICIBANK","LONG","09 Jun 25","13 Jun 25",103,1302,1237.16,-6679,-.05],
-["ICICIBANK","LONG","21 May 25","25 May 25",79,546,517.34,-2264,-.053],
-["TITAN","LONG","10 May 25","14 May 25",116,1439,1378.42,-7027,-.042],
-["TITAN","LONG","22 Apr 25","26 Apr 25",92,683,743.58,5573,.089],
-["AXISBANK","LONG","11 Apr 25","15 Apr 25",129,1576,1728.56,19680,.097],
-["BHARTIARTL","LONG","12 Mar 25","16 Mar 25",142,1713,1804.3,12965,.053],
-["AXISBANK","LONG","03 Mar 25","07 Mar 25",105,820,873.87,5656,.066],
-["MARUTI","SHORT","13 Feb 25","17 Feb 25",155,1850,1712.36,-21334,-.074],
-["BHARTIARTL","LONG","04 Feb 25","08 Feb 25",118,957,890.49,-7848,-.07],
-].map(r=>({symbol:r[0],side:r[1],entryDate:r[2],exitDate:r[3],qty:r[4],entry:r[5],exit:r[6],pnl:r[7],ret:r[8]} as BlotterRow));
-
-const money=(v:number)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(v);
-const pct=(v:number,d=1)=>`${v>0?"+":""}${(v*100).toFixed(d)}%`;
-const points=(values:number[],w=900,h=240)=>{
-  const min=Math.min(...values),max=Math.max(...values);
-  return values.map((v,i)=>`${(i/(values.length-1))*w},${h-((v-min)/Math.max(1,max-min))*h}`).join(" ");
-};
-
-function Panel({children,className=""}:{children:React.ReactNode;className?:string}){return <section className={`panel ${className}`}>{children}</section>}
-function Head({kicker,title,tag}:{kicker:string;title:string;tag?:string}){return <div className="panel-head"><div><span>{kicker}</span><h2>{title}</h2></div>{tag&&<small>{tag}</small>}</div>}
+const topTrades:Trade[]=[
+["SUNPHARMA","LONG","22 Jun 25","07 Aug 25",242,269,97,.1115,2613,46,"Trend exit"],
+["CIPLA","LONG","03 Jun 25","21 Jul 25",332,320,96,-.0365,-1164,48,"Stop loss"],
+["LT","LONG","09 Jun 25","18 Jul 25",2389,2440,224,.0214,11451,39,"Trend exit"],
+["ITC","LONG","01 Jun 25","21 Jun 25",817,875,12,.071,696,20,"Trend exit"],
+["RELIANCE","LONG","12 May 25","11 Jun 25",2366,2176,190,-.0804,-36142,30,"Time exit"],
+["INFY","LONG","18 May 25","27 May 25",1063,1196,32,.1247,4244,9,"Trend exit"],
+["TITAN","LONG","11 May 25","20 May 25",2720,2524,62,-.0721,-12161,9,"Stop loss"],
+["CIPLA","LONG","12 Apr 25","14 May 25",2141,2347,82,.0963,16905,32,"Target"],
+["HDFCBANK","LONG","12 Mar 25","26 Apr 25",2145,2397,221,.1174,55659,45,"Target"],
+["BHARTIARTL","LONG","04 Mar 25","21 Apr 25",1068,987,55,-.0761,-4470,48,"Time exit"],
+["TATAMOTORS","LONG","02 Mar 25","28 Mar 25",2295,2136,144,-.0693,-22899,26,"Stop loss"],
+["INFY","LONG","28 Feb 25","21 Mar 25",1348,1428,52,.0593,4157,21,"Trend exit"],
+["ITC","LONG","22 Feb 25","18 Mar 25",1376,1508,64,.0962,8471,24,"Target"],
+["AXISBANK","LONG","20 Feb 25","09 Mar 25",954,948,40,-.0063,-240,17,"Stop loss"],
+["CIPLA","LONG","22 Jan 25","08 Mar 25",1543,1605,110,.0401,6806,45,"Target"],
+["TITAN","LONG","11 Nov 24","05 Dec 24",1466,1507,154,.0279,6297,24,"Target"],
+["LT","LONG","24 Nov 24","05 Dec 24",1828,2067,54,.1307,12903,11,"Target"],
+["BHARTIARTL","LONG","17 Oct 24","22 Nov 24",2129,2357,185,.1069,42104,36,"Trend exit"],
+["SUNPHARMA","LONG","29 Oct 24","16 Nov 24",1526,1647,144,.0794,17447,18,"Target"],
+["JSWSTEEL","LONG","21 Sept 24","09 Nov 24",2426,2535,39,.0449,4249,49,"Trend exit"],
+["HDFCBANK","LONG","28 Aug 24","06 Oct 24",981,1121,151,.1424,21093,39,"Trend exit"],
+["TATAMOTORS","LONG","15 Aug 24","26 Sept 24",2214,2404,180,.0857,34157,42,"Target"],
+["HDFCBANK","LONG","22 Aug 24","03 Sept 24",1273,1248,28,-.0194,-691,12,"Stop loss"],
+["TITAN","LONG","13 Jul 24","25 Aug 24",803,898,36,.1172,3390,43,"Target"],
+["TITAN","LONG","06 Aug 24","22 Aug 24",1314,1252,182,-.0477,-11411,16,"Stop loss"],
+].map(r=>({symbol:r[0],side:r[1],entryDate:r[2],exitDate:r[3],entry:r[4],exit:r[5],qty:r[6],ret:r[7],pnl:r[8],days:r[9],reason:r[10]} as Trade));
+const symbols=["RELIANCE","INFY","LT","ITC","CIPLA","TITAN","HDFCBANK","AXISBANK","JSWSTEEL","MARUTI","SUNPHARMA","TATAMOTORS"];
+const extraTrades:Trade[]=Array.from({length:43},(_,i)=>{const entry=650+(i*137)%2100,ret=((i%5)-2)*.031+Math.sin(i)*.018,qty=25+(i*17)%180;return{symbol:symbols[i%symbols.length],side:"LONG",entryDate:`${String(20-i%18).padStart(2,"0")} Jun 24`,exitDate:`${String(24-i%18).padStart(2,"0")} Jul 24`,entry,exit:+(entry*(1+ret)).toFixed(2),qty,ret,pnl:Math.round(entry*ret*qty),days:18+i%31,reason:ret>0?"Trend exit":"Stop loss"}});
+const allSampleTrades=[...topTrades,...extraTrades];
+const sampleSignals:Signal[]=[
+["RELIANCE","BUY","Energy","30 Jul 26",1632,1518,1861,92,"Momentum breakout with expanding volume and positive earnings revision."],
+["HDFCBANK","BUY","Financials","29 Jul 26",1537,1430,1753,63,"Momentum breakout with expanding volume and positive earnings revision."],
+["INFY","BUY","Technology","28 Jul 26",943,877,1075,65,"Momentum breakout with expanding volume and positive earnings revision."],
+["TATAMOTORS","BUY","Auto","27 Jul 26",1731,1609,1973,84,"Momentum breakout with expanding volume and positive earnings revision."],
+["LT","EXIT","Industrials","26 Jul 26",1778,1654,2027,65,"Trend score decayed below exit threshold; volatility regime turning."],
+["SUNPHARMA","WATCH","Healthcare","25 Jul 26",2123,1974,2420,59,"Setup forming, awaiting confirmation close above pivot."],
+].map(s=>({symbol:s[0],action:s[1],sector:s[2],date:s[3],price:s[4],stop:s[5],target:s[6],conviction:s[7],note:s[8]} as Signal));
+const sampleYears=[["2019",.246,58,.69,-.204,.89],["2020",-.084,67,.62,-.211,1.25],["2021",.412,65,.53,-.203,1.69],["2022",.069,37,.70,-.112,1.91],["2023",.287,47,.59,-.197,1.95],["2024",.173,66,.64,-.164,1.66],["2025",.114,51,.62,-.093,.94]];
+const sampleFactors=[["Momentum (12-1)","Primary alpha driver",.82,.094],["Quality (ROE)","Balance-sheet screen",.41,.031],["Low Volatility","Structural tilt away",-.18,-.009],["Value (EV/EBITDA)","Mild cheapness bias",.12,.012],["Size (SMID)","Mid-cap skew",.36,.026],["Liquidity","Turnover constraint",-.24,-.004]];
+function makeEquity(){let v=1000000,peak=v;return Array.from({length:320},(_,i)=>{v*=1+.00115+Math.sin(i/9)*.006+Math.cos(i/21)*.004+(i%67===0?-.065:0);peak=Math.max(peak,v);return{value:v,dd:v/peak-1}})}
+const sampleEquity=makeEquity();
+const inr=(n:number,d=0)=>`${n<0?"-":""}₹${Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d})}`;
+const pct=(n:number,d=1)=>`${n>0?"+":""}${(n*100).toFixed(d)}%`;
+const line=(v:number[],w=1000,h=360)=>{const lo=Math.min(...v),hi=Math.max(...v);return v.map((x,i)=>`${i/(v.length-1)*w},${h-(x-lo)/Math.max(1,hi-lo)*h}`).join(" ")};
+function SectionHead({eyebrow,title,copy,tag}:{eyebrow:string;title:string;copy:string;tag?:string}){return <header className="section-head"><div><span>{eyebrow}</span><h2>{title}</h2><p>{copy}</p></div>{tag&&<b>{tag}</b>}</header>}
 
 export default function Home(){
-  const [feed,setFeed]=useState<Feed|null>(null);
-  const [loading,setLoading]=useState(true);
-  const [filter,setFilter]=useState("");
-  const [preview,setPreview]=useState(false);
-  const [tradeView,setTradeView]=useState<"ALL"|"OPEN"|"CLOSED">("ALL");
-  const [tradeSort,setTradeSort]=useState<"NEWEST"|"BEST"|"SYMBOL">("NEWEST");
-  const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};
-  useEffect(load,[]);
-  const live=feed?.status==="ready"&&Boolean(feed.equity?.length);
-  const equity=live?feed!.equity.map(x=>x.value*100):sample.equity;
-  const signals=feed?.signals?.length?feed.signals:sample.signals;
-  const trades=feed?.trades?.length?feed.trades:sample.trades;
-  const factors=feed?.factors?.length?feed.factors:sample.factors;
-  const yearly=feed?.yearly?.length?feed.yearly:sample.yearly;
-  const multiple=feed?.summary.final_multiple??2.292;
-  const maxDD=feed?.summary.max_drawdown??-.089;
-  const sharpe=feed?.summary.cohort_sharpe??1.42;
-  const win=feed?.summary.win_rate??.57;
-  const years=Math.max(1,yearly.length);
-  const cagr=live?Math.pow(multiple,1/years)-1:.144;
-  const underwater=useMemo(()=>{let peak=0;return equity.map(v=>{peak=Math.max(peak,v);return (v/peak-1)*100})},[equity]);
-  const blotter:BlotterRow[]=live?trades.map(t=>({symbol:t.ticker,side:"LONG",entryDate:t.entry_date,exitDate:t.exit?"Closed":null,qty:0,entry:t.entry,exit:t.exit||null,pnl:t.exit?(t.exit-t.entry):null,ret:t.net_return})):sampleBlotter;
-  const visibleTrades=blotter.filter(t=>{
-    const text=t.symbol.toLowerCase().includes(filter.toLowerCase());
-    const status=tradeView==="ALL"||(tradeView==="OPEN"?!t.exitDate:Boolean(t.exitDate));
-    return text&&status;
-  }).sort((a,b)=>tradeSort==="BEST"?(b.pnl??-Infinity)-(a.pnl??-Infinity):tradeSort==="SYMBOL"?a.symbol.localeCompare(b.symbol):0);
-  const stamp=feed?.generated_at?new Date(feed.generated_at).toLocaleString("en-IN"):"No timestamp in feed";
-
-  return <main>
-    <a className="skip" href="#dashboard">Skip to dashboard</a>
-    <header className="terminal-head">
-      <div className="head-main">
-        <div className="terminal-identity"><span className="terminal-mark">⌁</span><div><h1>NSE-bot <em>/ Research Terminal</em></h1><p>INDIAN EQUITIES · SYSTEMATIC LONG BOOK · SCHEMA V1</p></div></div>
-        <div className="feed-meta">
-          <a className="blotter-link" href="#trade-blotter">View trade blotter ↓</a>
-          <button onClick={load} disabled={loading}>↻ {loading?"Syncing":"Refresh"}</button>
-          <dl><div><dt>Snapshot</dt><dd>{stamp}</dd></div><div><dt>Status</dt><dd>{live?"LIVE FEED":"UNVERIFIED"}</dd></div><div><dt>Schema</dt><dd>v1</dd></div></dl>
-        </div>
-      </div>
-      <div className="ticker"><i/> Data feed status <strong>{feed?.status??"loading"}</strong> · read-only research terminal</div>
-    </header>
-
-    <div id="dashboard" className="board">
-      {!live&&!preview?<div className="empty-gate"><div className="database-mark">▤</div><h3>Feed connected · awaiting first publish</h3><p>The live feed is reachable and valid, but the bot has not written any equity, trade or signal records yet.</p><button onClick={()=>setPreview(true)}>PREVIEW WITH ILLUSTRATIVE SAMPLE</button></div>:<>
-      {!live&&<div className="notice"><b>Illustrative preview.</b> Synthetic sample output is shown only to demonstrate the terminal layout and is not an NSE-bot track record. <button onClick={()=>setPreview(false)}>Exit preview</button></div>}
-
-      <div className="primary-grid">
-        <div>
-          <div className="stats">
-            {[
-              ["TOTAL RETURN",pct(multiple-1), "Since inception","pos"],
-              ["CAGR",pct(cagr), "Annualised","pos"],
-              ["SHARPE",sharpe.toFixed(2), "Risk-adjusted",""],
-              ["MAX DRAWDOWN",pct(maxDD), "Peak to trough","warn"],
-              ["WIN RATE",pct(win,0), "Closed trades",""],
-              ["TRADES",String(live?(feed?.summary.trades??trades.length):24), "All time",""],
-              ["EXPOSURE","78%", "Avg. invested",""],
-              ["OPEN POSITIONS",String(signals.length), "Live book",""],
-            ].map(([a,b,c,t])=><div className="stat" key={a}><span>{a}</span><strong className={t}>{b}</strong><small>{c}</small></div>)}
-          </div>
-
-          <Panel className="equity">
-            <Head kicker="CUMULATIVE PERFORMANCE" title="Equity curve & drawdown" tag={`${equity.length} OBS`}/>
-            <div className="nav-value">{equity.at(-1)?.toFixed(2)} <small>NAV</small></div>
-            <svg viewBox="0 0 900 250" role="img" aria-label="Portfolio equity curve">
-              {[0,60,120,180,240].map(y=><line key={y} x1="0" x2="900" y1={y} y2={y}/>)}
-              <polygon points={`0,250 ${points(equity,900,225)} 900,250`} className="eq-fill"/>
-              <polyline points={points(equity,900,225)} className="eq-line"/>
-            </svg>
-            <div className="under"><span className="eyebrow">UNDERWATER / DRAWDOWN</span><svg viewBox="0 0 900 90"><line x1="0" x2="900" y1="4" y2="4"/><polygon points={`0,4 ${underwater.map((v,i)=>`${i/(underwater.length-1)*900},${4+Math.abs(v)*7}`).join(" ")} 900,4`} /></svg></div>
-          </Panel>
-        </div>
-
-        <aside>
-          <Panel>
-            <Head kicker="LATEST OUTPUT" title="Current signals" tag={`${signals.length} ACTIVE`}/>
-            <div className="signals">{signals.map(s=><article key={`${s.ticker}-${s.rank}`}><div><b>{s.ticker}</b><span>{s.sector}</span></div><strong className={s.rank<3?"pos":""}>{s.rank<3?"BUY":"WATCH"}</strong><div className="score"><i style={{width:`${Math.min(100,s.score)}%`}}/><span>{s.score.toFixed(1)}</span></div><small>{money(s.close)} · stop {money(s.initial_stop)}</small></article>)}</div>
-          </Panel>
-          <Panel>
-            <Head kicker="RISK DECOMPOSITION" title="Factor exposure" tag="MODEL WEIGHTS"/>
-            <div className="factor-list">{factors.map(f=><div key={f.name}><span>{f.name.replaceAll("_"," ")}</span><i><b style={{width:`${Math.min(100,Math.abs(f.weight)*300)}%`}}/></i><strong>{pct(f.weight,0)}</strong></div>)}</div>
-          </Panel>
-        </aside>
-      </div>
-
-      <div className="lower-grid">
-        <Panel>
-          <Head kicker="CALENDAR ATTRIBUTION" title="Yearly performance"/>
-          <div className="years">{yearly.map(y=><div key={y.year}><span>{y.year}</span><i className={y.strategy_return<0?"negative":""} style={{height:`${Math.max(8,Math.abs(y.strategy_return)*240)}px`}}/><b className={y.strategy_return>=0?"pos":"neg"}>{pct(y.strategy_return)}</b></div>)}</div>
-        </Panel>
-        <Panel className="trade-panel">
-          <div id="trade-blotter" className="anchor"/>
-          <div className="trades-head"><Head kicker="EXECUTION RECORD" title="Trade blotter" tag={`${blotter.length} trades · net ${money(blotter.reduce((n,t)=>n+(t.pnl??0),0))}`}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter symbol…"/></div>
-          <div className="blotter-controls" role="group" aria-label="Filter trades by status">
-            {(["ALL","OPEN","CLOSED"] as const).map(v=><button key={v} className={tradeView===v?"selected":""} onClick={()=>setTradeView(v)}>{v}</button>)}
-            <label>Sort trades <select value={tradeSort} onChange={e=>setTradeSort(e.target.value as typeof tradeSort)}><option value="NEWEST">Newest</option><option value="BEST">Best P&amp;L</option><option value="SYMBOL">Symbol</option></select></label>
-          </div>
-          <div className="table-wrap"><table><caption>Full list of trades with entry, exit and P&amp;L</caption><thead><tr>{["SYMBOL","SIDE","ENTRY","EXIT","QTY","IN","OUT","P&L","RETURN"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{visibleTrades.map((t,i)=><tr key={`${t.symbol}-${i}`}><td><b>{t.symbol}</b>{!t.exitDate&&<small className="open-badge">Open</small>}</td><td>{t.side}</td><td>{t.entryDate}</td><td>{t.exitDate??"—"}</td><td>{t.qty||"—"}</td><td>{t.entry.toLocaleString("en-IN")}</td><td>{t.exit?.toLocaleString("en-IN")??"—"}</td><td className={(t.pnl??0)>=0?"pos":"neg"}>{t.pnl===null?"—":money(t.pnl)}</td><td className={(t.ret??0)>=0?"pos":"neg"}>{t.ret===null?"—":pct(t.ret)}</td></tr>)}</tbody></table></div>
-        </Panel>
-      </div>
-      </>}
-    </div>
-    <footer>Research interface only. Illustrative figures are synthetic placeholders and must not be read as realised or backtested performance.</footer>
-  </main>
+ const[feed,setFeed]=useState<Feed|null>(null),[loading,setLoading]=useState(true),[sample,setSample]=useState(false),[range,setRange]=useState("ALL"),[filter,setFilter]=useState(""),[outcome,setOutcome]=useState("all"),[sort,setSort]=useState("Recent"),[shown,setShown]=useState(25);
+ const load=()=>{setLoading(true);fetch("/api/data",{cache:"no-store"}).then(r=>r.json()).then(setFeed).finally(()=>setLoading(false))};useEffect(load,[]);
+ const live=feed?.status==="ready"&&Boolean(feed.equity?.length),demo=!live&&sample;
+ const equity=live?feed!.equity.map(x=>({value:x.value*1000000,dd:0})):demo?sampleEquity:[];
+ let peak=0;equity.forEach(x=>{peak=Math.max(peak,x.value);x.dd=x.value/peak-1});
+ const signals:Signal[]=live?feed!.signals.map(s=>({symbol:s.ticker,action:"BUY",sector:s.sector,date:s.date,price:s.close,stop:s.initial_stop,target:s.close*1.14,conviction:s.score,note:"Systematic entry cleared the strategy filters."})):demo?sampleSignals:[];
+ const trades:Trade[]=live?feed!.trades.map(t=>({symbol:t.ticker,side:"LONG",entryDate:t.entry_date,exitDate:"Closed",entry:t.entry,exit:t.exit,qty:0,ret:t.net_return,pnl:(t.exit-t.entry),days:0,reason:t.exit_reason})):demo?allSampleTrades:[];
+ const rows=trades.filter(t=>t.symbol.toLowerCase().includes(filter.toLowerCase())&&(outcome==="all"||outcome==="wins"&&t.ret>0||outcome==="losses"&&t.ret<0)).sort((a,b)=>sort==="Return"?b.ret-a.ret:sort==="P&L"?b.pnl-a.pnl:sort==="Symbol"?a.symbol.localeCompare(b.symbol):0);
+ const eqValues=equity.map(x=>x.value),dds=equity.map(x=>x.dd),final=eqValues.at(-1)??0,total=demo?.442:final?final/eqValues[0]-1:0;
+ return <main>
+  <a className="skip" href="#main">Skip to content</a>
+  <header className="command"><div className="pulse-logo">⌁</div><div className="brand-copy"><h1>NSE-bot <em>/ Research Terminal</em></h1><p>INDIAN EQUITIES · SYSTEMATIC LONG BOOK · SCHEMA V1</p></div><div className={`mode ${demo?"sample":live?"live":""}`}><i/>{demo?"SAMPLE MODE":live?"LIVE":"AWAITING DATA"}</div><div className="stamp">NO TIMESTAMP · 0S AGO</div><button onClick={load}>↻</button></header>
+  <div id="main" className="terminal">
+   {!live&&!demo&&<section className="await"><div>▤</div><h3>Feed connected · awaiting first publish</h3><p>The live feed is reachable and valid, but the bot has not written any equity, trade or signal records yet.</p><button onClick={()=>setSample(true)}>PREVIEW WITH ILLUSTRATIVE SAMPLE</button></section>}
+   {demo&&<div className="sample-alert"><b>△ ILLUSTRATIVE SAMPLE</b> — synthetic figures generated in-browser to demonstrate layout. Not verified, not backtested, not the NSE-bot track record.</div>}
+   <section className="kpis">{[["TOTAL RETURN",demo?"+44.2%":live?pct(total):"—",demo?"NAV ₹14.5L":"since inception","positive"],["MAX DRAWDOWN",demo?"-17.3%":live?pct(Math.min(...dds)):"—","peak-to-trough","negative"],["SHARPE",demo?"1.32":live?String(feed?.summary.cohort_sharpe??"—"):"—",demo?"Sortino 1.86":"Sortino —",""],["WIN RATE",demo?"60.3%":live?pct(feed?.summary.win_rate??0):"—",demo?"41 of 68 closed":"0 of — closed","positive"],["CLOSED TRADES",demo?"68":live?String(trades.length):"0",demo?"PF 1.74":"PF —",""]].map(x=><div key={x[0]}><span>{x[0]}</span><strong className={x[3]}>{x[1]}</strong><small>{x[2]}</small></div>)}</section>
+   <div className="hero-grid">
+    <section className="module equity-module"><SectionHead eyebrow="PORTFOLIO" title="Equity curve" copy={demo?"Illustrative sample series — not verified performance.":"Mark-to-market net asset value published by the strategy runner."}/><div className="ranges">{["1Y","3Y","5Y","ALL"].map(r=><button className={range===r?"active":""} onClick={()=>setRange(r)} key={r}>{r}</button>)}</div>{equity.length?<><div className="equity-stats"><div><span>LATEST NAV</span><b>{demo?inr(1449894):inr(final)}</b></div><div><span>{range} CHANGE</span><b>{demo?"+44.18%":pct(total,2)}</b></div></div><svg viewBox="0 0 1000 390"><defs><linearGradient id="navfill" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#b9ed18" stopOpacity=".2"/><stop offset="1" stopColor="#b9ed18" stopOpacity="0"/></linearGradient></defs>{[40,140,240,340].map(y=><line key={y} x1="0" x2="1000" y1={y} y2={y}/>)}<polygon points={`0,390 ${line(eqValues,1000,360)} 1000,390`} fill="url(#navfill)"/><polyline points={line(eqValues,1000,360)}/></svg></>:<div className="empty"><h3>No equity history</h3><p>The NAV series is empty. The curve renders after the first published mark.</p></div>}</section>
+    <section className="module signals-module"><SectionHead eyebrow="LIVE BOOK" title="Current signals" copy={demo?"Illustrative signals — do not trade on these.":"Latest actionable calls emitted by the scanner, newest first."} tag={`${signals.length} OPEN`}/>{signals.length?<ul>{signals.map(s=><li key={s.symbol}><div className="signal-copy"><div><b>{s.symbol}</b><em className={s.action.toLowerCase()}>{s.action}</em><span>{s.sector}</span></div><p>{s.note}</p><small>{s.date}</small></div><dl><div><dt>PRICE</dt><dd>{inr(s.price)}</dd></div><div><dt>STOP</dt><dd className="negative">{inr(s.stop)}</dd></div><div><dt>TARGET</dt><dd className="positive">{inr(s.target)}</dd></div><div className="conv"><dt>CONVICTION {s.conviction}</dt><dd><i style={{width:`${s.conviction}%`}}/></dd></div></dl></li>)}</ul>:<div className="empty"><h3>No open signals</h3><p>The strategy is flat. Fresh entries publish after the next scan.</p></div>}</section>
+   </div>
+   <div className="risk-grid">
+    <section className="module"><SectionHead eyebrow="RISK" title="Underwater curve" copy={demo?"Illustrative drawdown profile from the sample series.":"Peak-to-trough decline of published NAV."} tag={demo?"-17.27%":dds.length?pct(Math.min(...dds),2):"MAX DD —"}/>{dds.length?<><svg className="dd-chart" viewBox="0 0 700 220">{[10,60,110,160,210].map(y=><line key={y} x1="0" x2="700" y1={y} y2={y}/>)}<polyline points={dds.map((v,i)=>`${i/(dds.length-1)*700},${10+Math.abs(v)*1100}`).join(" ")}/></svg><div className="dd-foot"><span>CURRENT DRAWDOWN <b>{demo?"-10.18%":pct(dds.at(-1)??0,2)}</b></span><span>OBSERVATIONS <b>{dds.length}</b></span></div></>:<div className="empty"><h3>No drawdown history</h3></div>}</section>
+    <section className="module regime"><SectionHead eyebrow="CONTEXT" title="Regime & posture" copy={demo?"Illustrative regime read — synthetic.":"How the strategy is currently positioned."}/><span>MARKET REGIME</span><h3>{demo?"Risk-On · Expansion":"Not published"}</h3><div className="exposure"><span>GROSS EXPOSURE <b>{demo?"64%":"—"}</b></span><i><b style={{width:demo?"64%":"0%"}}/></i></div><dl>{[["SORTINO",demo?"1.86":"—"],["PROFIT FACTOR",demo?"1.74":"—"],["AVG HOLD",demo?"27d":"—"],["WIN RATE",demo?"60.3%":"—"],["CAGR",demo?"+19.4%":"—"],["BENCHMARK · NIFTY 50",demo?"+96.4%":"—"]].map(x=><div key={x[0]}><dt>{x[0]}</dt><dd>{x[1]}</dd></div>)}</dl></section>
+   </div>
+   <section className="module ledger"><SectionHead eyebrow="EXECUTION" title="Trade ledger" copy={demo?"Illustrative fills — synthetic, not executed orders.":"Every closed position published by the bot, with realised P&L."} tag={`${trades.length} TRADES`}/><div className="ledger-tools"><input placeholder="Filter symbol" value={filter} onChange={e=>setFilter(e.target.value)}/><div>{["all","wins","losses"].map(o=><button className={outcome===o?"active":""} onClick={()=>setOutcome(o)} key={o}>{o}</button>)}</div><label>Sort <select value={sort} onChange={e=>setSort(e.target.value)}><option>Recent</option><option>Return</option><option>P&amp;L</option><option>Symbol</option></select></label></div>{rows.length?<><div className="table-scroll"><table><caption>Closed trades with entry, exit and realised P&amp;L</caption><thead><tr>{["Symbol","Side","Entry","Exit","Entry ₹","Exit ₹","Qty","Return","P&L","Days","Reason"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.slice(0,shown).map((t,i)=><tr key={`${t.symbol}${i}`}><td><b>{t.symbol}</b></td><td>{t.side}</td><td>{t.entryDate}</td><td>{t.exitDate}</td><td>{inr(t.entry)}</td><td>{inr(t.exit)}</td><td>{t.qty||"—"}</td><td className={t.ret>=0?"positive":"negative"}>{pct(t.ret,2)}</td><td className={t.pnl>=0?"positive":"negative"}>{inr(t.pnl,1)}</td><td>{t.days||"—"}</td><td>{t.reason}</td></tr>)}</tbody></table></div>{shown<rows.length&&<button className="load-more" onClick={()=>setShown(v=>v+25)}>Load 25 more · {rows.length-shown} remaining</button>}</>:<div className="empty"><h3>No closed trades yet</h3></div>}</section>
+   <div className="bottom-grid">
+    <section className="module"><SectionHead eyebrow="TRACK RECORD" title="Yearly performance" copy={demo?"Illustrative annual returns — synthetic figures.":"Calendar-year returns, activity and risk."}/><ul className="year-cards">{(demo?sampleYears:[]).map(y=><li key={String(y[0])}><b>{y[0]}</b><strong className={(y[1] as number)>=0?"positive":"negative"}>{pct(y[1] as number)}</strong><span>{y[2]} trades</span><span>WR {pct(y[3] as number)}</span><span>DD {pct(y[4] as number)}</span><span>SR {y[5]}</span></li>)}</ul></section>
+    <section className="module"><SectionHead eyebrow="ATTRIBUTION" title="Factor exposure" copy={demo?"Illustrative factor tilts — synthetic figures.":"Standardised tilts of the live book."}/><ul className="factor-cards">{(demo?sampleFactors:[]).map(f=><li key={String(f[0])}><div><b>{f[0]}</b><span>{f[1]}</span></div><strong>{f[2]}</strong><em className={(f[3] as number)>=0?"positive":"negative"}>{pct(f[3] as number)}</em></li>)}</ul></section>
+    <section className="module integrity"><SectionHead eyebrow="INTEGRITY" title="Feed freshness" copy="Transport diagnostics for the live data contract."/><b className="overlay">{demo?"SAMPLE OVERLAY":"CAUTION"}</b><p>{demo?"Within the daily publish window":"No generated timestamp in payload"}</p><dl><div><dt>Schema version</dt><dd>1</dd></div><div><dt>Payload status</dt><dd>{demo?"sample":feed?.status??"unknown"}</dd></div><div><dt>Generated</dt><dd>{demo?"5m ago":"unknown"}</dd></div><div><dt>Polled</dt><dd>0s ago</dd></div><div><dt>Records</dt><dd>{equity.length} eq · {trades.length} tr · {signals.length} sg</dd></div></dl>{demo&&<button onClick={()=>setSample(false)}>Hide illustrative sample</button>}</section>
+   </div>
+  </div>
+  <footer>Research display only. Nothing here is investment advice or a solicitation to trade.</footer>
+ </main>
 }
